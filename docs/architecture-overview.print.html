@@ -1,0 +1,858 @@
+<meta name="color-scheme" content="light"><title>Helix Platform Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{
+  --ground:#FBFAF7; --surface:#FFFFFF; --sunk:#F4F2EC;
+  --ink:#16181D; --body:#33373F; --muted:#6B6F76; --faint:#8E9299;
+  --rule:#E3E0D8; --rule-strong:#CFCBBF;
+  --now:#B4690E; --now-soft:#F5EADB;
+  --future:#0F6E75; --future-soft:#E0EFEF;
+  --deny:#A8331F; --deny-soft:#F7E7E3;
+  --ok:#3F6B2E;
+  --term-bg:#171A1F; --term-ink:#D8D5CE; --term-dim:#8A9099; --term-ok:#8FBF7A; --term-warn:#E0A051; --term-deny:#E08A76;
+  --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --measure:68ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1216; --surface:#161A20; --sunk:#12161B;
+    --ink:#EDEAE4; --body:#C6C9CE; --muted:#949AA3; --faint:#767C85;
+    --rule:#262B33; --rule-strong:#39404A;
+    --now:#E0A051; --now-soft:#2A2118;
+    --future:#57C2C9; --future-soft:#12262A;
+    --deny:#E28F7B; --deny-soft:#2C1B18;
+    --ok:#8FBF7A;
+    --term-bg:#0A0C0F; --term-ink:#D8D5CE;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1216; --surface:#161A20; --sunk:#12161B;
+  --ink:#EDEAE4; --body:#C6C9CE; --muted:#949AA3; --faint:#767C85;
+  --rule:#262B33; --rule-strong:#39404A;
+  --now:#E0A051; --now-soft:#2A2118;
+  --future:#57C2C9; --future-soft:#12262A;
+  --deny:#E28F7B; --deny-soft:#2C1B18;
+  --ok:#8FBF7A;
+  --term-bg:#0A0C0F; --term-ink:#D8D5CE;
+}
+
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--body);font-family:var(--sans);font-size:15px;line-height:1.62;
+  -webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--serif);color:var(--ink);text-wrap:balance;margin:0}
+p{margin:0}
+a{color:inherit}
+code{font-family:var(--mono);font-size:.88em}
+:focus-visible{outline:2px solid var(--now);outline-offset:3px;border-radius:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- shell ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px}
+.cols{display:grid;grid-template-columns:186px minmax(0,1fr);gap:56px;align-items:start}
+@media(max-width:900px){.cols{grid-template-columns:1fr;gap:0}}
+
+/* ---------- masthead ---------- */
+.mast{padding:56px 0 36px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(38px,6.2vw,62px);line-height:1.02;font-weight:600;letter-spacing:-.022em;margin:16px 0 0}
+h1 em{font-style:italic;font-weight:400;color:var(--now)}
+.deck{font-family:var(--serif);font-size:clamp(17px,2.1vw,21px);line-height:1.5;color:var(--body);
+  max-width:60ch;margin-top:20px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:2px 32px;margin-top:34px;
+  border-top:1px solid var(--rule);padding-top:18px}
+.fact dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.fact dd{margin:3px 0 0;font-size:14px;color:var(--ink);font-weight:500}
+
+/* ---------- rail ---------- */
+.rail{position:sticky;top:24px;padding-top:44px}
+@media(max-width:900px){.rail{position:static;padding:28px 0 0;border-bottom:1px solid var(--rule);margin-bottom:8px}}
+.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.rail a{display:grid;grid-template-columns:22px 1fr;gap:8px;padding:5px 0;text-decoration:none;
+  font-size:13px;color:var(--muted);border-top:1px solid transparent}
+.rail a:hover{color:var(--ink)}
+.rail .n{font-family:var(--mono);font-size:11px;color:var(--faint);padding-top:2px}
+.rail .extra{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+
+/* ---------- sections ---------- */
+section{padding-top:64px;scroll-margin-top:20px}
+.shead{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--rule-strong);padding-bottom:12px;margin-bottom:26px}
+.shead .num{font-family:var(--mono);font-size:12px;color:var(--now);letter-spacing:.08em;padding-top:2px}
+.shead h2{font-size:clamp(23px,3vw,29px);font-weight:600;letter-spacing:-.015em}
+.lede{max-width:var(--measure);font-size:16px}
+.lede + .lede{margin-top:14px}
+.stack{display:flex;flex-direction:column;gap:22px}
+.stack > p, .stack > .lede{max-width:var(--measure)}
+h3.sub{font-size:16px;font-weight:600;letter-spacing:-.005em;margin-top:8px}
+.kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);
+  margin-bottom:10px}
+
+/* ---------- pull ---------- */
+.pull{border-left:3px solid var(--now);padding:2px 0 2px 20px;max-width:var(--measure)}
+.pull p{font-family:var(--serif);font-size:19px;line-height:1.48;color:var(--ink)}
+
+/* ---------- tables ---------- */
+.tscroll{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:12px 15px;border-bottom:1px solid var(--rule)}
+tbody tr:last-child td{border-bottom:0}
+thead th{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);font-weight:500;background:var(--sunk);border-bottom:1px solid var(--rule-strong);white-space:nowrap}
+th.axis-now{color:var(--now)}
+th.axis-future{color:var(--future)}
+td.part{font-weight:600;color:var(--ink);white-space:nowrap;font-size:13.5px}
+td.reason{color:var(--muted);font-size:12.8px;line-height:1.5}
+td b{color:var(--ink);font-weight:600}
+td code{background:var(--sunk);padding:1px 4px;border-radius:2px;font-size:11.5px}
+.num-col{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- diagram ---------- */
+.diagram{border:1px solid var(--rule);border-radius:3px;background:var(--surface);overflow-x:auto}
+.dgrid{min-width:640px;padding:22px}
+.band{display:grid;grid-template-columns:96px minmax(0,1fr);gap:16px;align-items:center}
+.band + .band{margin-top:0}
+.blabel{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+  text-align:right;line-height:1.35}
+.bbox{border:1px solid var(--rule-strong);border-radius:3px;background:var(--sunk);padding:11px 14px}
+.bbox.accent{border-color:var(--now);background:var(--now-soft)}
+.brow{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-family:var(--mono);font-size:11px;padding:4px 8px;border:1px solid var(--rule-strong);
+  border-radius:2px;background:var(--surface);color:var(--body);white-space:nowrap}
+.chip.k{border-color:var(--now);color:var(--now)}
+.chip.p{border-color:var(--future);color:var(--future)}
+.btitle{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.drop{grid-column:2;height:16px;margin-left:18px;border-left:1px solid var(--rule-strong)}
+.gate{counter-reset:g;display:flex;flex-direction:column;gap:0}
+.gate li{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:baseline;padding:6px 0;
+  border-bottom:1px dotted var(--rule);font-size:12.5px;list-style:none}
+.gate li:last-child{border-bottom:0}
+.gate .gn{font-family:var(--mono);font-size:10px;color:var(--now)}
+.gate .gc{font-family:var(--mono);font-size:11px;color:var(--deny);white-space:nowrap}
+
+/* event flow */
+.flow{display:grid;gap:0;min-width:600px;padding:22px}
+.fnode{border:1px solid var(--rule-strong);border-radius:3px;padding:10px 13px;background:var(--sunk)}
+.fnode .ft{font-family:var(--mono);font-size:11.5px;color:var(--ink);font-weight:500}
+.fnode .fd{font-size:11.5px;color:var(--muted);margin-top:2px}
+.fbus{border:1px solid var(--now);background:var(--now-soft);border-radius:3px;padding:10px 13px;text-align:center}
+.fbus .ft{color:var(--now)}
+.fanout{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:640px){.fanout{grid-template-columns:1fr}}
+.farrow{justify-self:start;margin-left:20px;color:var(--faint);font-family:var(--mono);font-size:11px;
+  padding:5px 0 5px 0;display:flex;align-items:center;gap:8px}
+.farrow::before{content:"";width:1px;height:16px;background:var(--rule-strong)}
+
+/* ---------- code / tree / terminal ---------- */
+pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.62;overflow-x:auto}
+.tree{border:1px solid var(--rule);border-radius:3px;background:var(--surface);padding:18px 20px;color:var(--body)}
+.tree .c{color:var(--faint)}
+.tree .h{color:var(--now)}
+.term{border-radius:3px;background:var(--term-bg);color:var(--term-ink);padding:16px 18px;border:1px solid var(--rule)}
+.term .cmd{color:var(--term-warn)}
+.term .dim{color:var(--term-dim)}
+.term .ok{color:var(--term-ok)}
+.term .no{color:var(--term-deny)}
+.termcap{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  margin-bottom:8px;display:flex;gap:10px;align-items:baseline}
+.termcap .tag{color:var(--ok)}
+
+/* ---------- item lists ---------- */
+.items{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:0 34px}
+.item{padding:13px 0;border-top:1px solid var(--rule)}
+.item h4{font-size:13.5px;font-weight:600;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.item p{font-size:12.8px;color:var(--muted);margin-top:4px;line-height:1.55}
+.vtag{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ok);
+  border:1px solid currentColor;border-radius:2px;padding:0 4px;font-weight:400}
+
+/* ---------- stages ---------- */
+.stages{display:flex;flex-direction:column}
+.stage{display:grid;grid-template-columns:34px minmax(0,1fr);gap:18px;padding:18px 0;border-top:1px solid var(--rule)}
+.stage:last-child{border-bottom:1px solid var(--rule)}
+.sn{font-family:var(--mono);font-size:11px;color:var(--now);padding-top:3px}
+.stage h4{font-size:15px;font-weight:600;margin-bottom:3px}
+.stage .when{font-family:var(--mono);font-size:11px;color:var(--future);margin-bottom:7px}
+.stage p{font-size:13px;color:var(--muted);max-width:62ch}
+
+/* ---------- closing ---------- */
+.close{margin-top:72px;border-top:2px solid var(--ink);padding-top:26px;display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:26px}
+.close h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint);
+  font-weight:400;margin-bottom:6px}
+.close p{font-size:13px;color:var(--muted)}
+.close b{color:var(--ink);font-weight:600}
+</style>
+<style media="print">
+  :root{
+    --ground:#FFFFFF; --surface:#FFFFFF; --sunk:#F4F2EC;
+    --ink:#16181D; --body:#2B2F36; --muted:#5C6067; --faint:#7A7E85;
+    --rule:#DCD9D1; --rule-strong:#BFBBB0;
+    --now:#8F5309; --future:#0C585E; --deny:#8C2A18; --ok:#33571F;
+    --term-bg:#14171B; --term-ink:#E6E3DC; --term-dim:#9AA0A8;
+  }
+  @page{ size:A4; margin:16mm 14mm; }
+  html,body{ background:#fff!important; }
+  body{ font-size:10.5pt; line-height:1.5; }
+
+  /* The rail is on-screen navigation; on paper it is noise. */
+  .rail{ display:none!important; }
+  .cols{ display:block!important; }
+  .wrap{ max-width:none; padding:0; }
+
+  h1{ font-size:26pt; }
+  .deck{ font-size:12pt; }
+  .shead h2{ font-size:15pt; }
+  h3.sub{ font-size:11pt; }
+
+  /* Each numbered answer starts on a fresh page, so the six sections are
+     findable by a reviewer flicking through. */
+  section{ break-before:page; padding-top:0; }
+  section:first-of-type{ break-before:auto; }
+  .shead{ break-after:avoid; }
+  h3.sub,.kicker{ break-after:avoid; }
+
+  /* Never split a table row, a terminal transcript or a diagram across pages. */
+  .tscroll,.term,.diagram,.flow,.item,.pull{ break-inside:avoid; }
+  table{ min-width:0!important; font-size:8.6pt; }
+  th,td{ padding:6px 8px; }
+  .tscroll,.diagram{ overflow:visible!important; }
+  .dgrid,.flow{ min-width:0!important; padding:12px; }
+  /* Shrink the two tall graphics just enough to sit under their own heading
+     rather than being pushed onto a page of their own. */
+  .diagram{ zoom:.84; }
+  .flowwrap,.flow{ zoom:.9; }
+  pre{ font-size:8pt; white-space:pre-wrap; word-break:break-word; }
+  .chip{ font-size:8.5pt; }
+
+  a{ text-decoration:none; color:inherit; }
+  [data-noprint]{ display:none!important; }
+</style>
+
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">Technical design task &middot; September 2026</div>
+    <h1>Helix Platform <em>Architecture</em></h1>
+    <p class="deck">A multi-tenant platform built to host 100+ integrated products &mdash; search, meetings,
+      calendar, storage, cloud services &mdash; for global users. Modular monolith now; services
+      when a measured trigger says so, not before.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Stack</dt><dd>TypeScript &middot; NestJS &middot; Next.js &middot; PostgreSQL &middot; Redis</dd></div>
+      <div class="fact"><dt>Deployables</dt><dd>API &middot; worker &middot; media plane</dd></div>
+      <div class="fact"><dt>Sample project</dt><dd>4 products, running &amp; seeded</dd></div>
+      <div class="fact"><dt>Evidence</dt><dd>38 tests + 16 live checks, transcripts included</dd></div>
+    </dl>
+  </header>
+
+  <div class="cols">
+    <nav class="rail" aria-label="Contents">
+      <ol>
+        <li><a href="#a1"><span class="n">01</span><span>Architecture</span></a></li>
+        <li><a href="#a2"><span class="n">02</span><span>Folder structure</span></a></li>
+        <li><a href="#a3"><span class="n">03</span><span>System design</span></a></li>
+        <li><a href="#a4"><span class="n">04</span><span>Technology</span></a></li>
+        <li><a href="#a5"><span class="n">05</span><span>Security &amp; scale</span></a></li>
+        <li><a href="#a6"><span class="n">06</span><span>Future architecture</span></a></li>
+      </ol>
+      <div class="extra">
+        <a href="#thesis"><span class="n">&mdash;</span><span>The thesis</span></a>
+        <a href="#proof"><span class="n">&mdash;</span><span>Verification</span></a>
+      </div>
+    </nav>
+
+    <main>
+
+      <!-- THESIS -->
+      <section id="thesis" style="padding-top:44px">
+        <div class="pull">
+          <p>A platform hosting 100+ products does not need 100 microservices. It needs boundaries a
+          product <em>cannot</em> violate, and a kernel a product <em>cannot</em> bypass.</p>
+        </div>
+        <div class="stack" style="margin-top:24px">
+          <p class="lede">This design takes the boundaries on day one &mdash; one Postgres schema per product,
+          events as the only cross-product dependency, one declarative manifest per product, a URL prefix
+          per product &mdash; and defers the <em>distribution</em> until a written, measurable trigger justifies
+          paying for it.</p>
+          <p class="lede">Two consequences follow, and everything below is in service of them:
+          adding product #101 is a single command, and extracting any product into its own service is a
+          deployment change rather than a rewrite.</p>
+        </div>
+      </section>
+
+      <!-- 1 ARCHITECTURE -->
+      <section id="a1">
+        <div class="shead"><span class="num">01</span><h2>Which architecture should be used?</h2></div>
+        <div class="stack">
+          <p class="lede">The boundaries a microservice architecture gives you are valuable. The distribution
+          is what costs you. So: take the boundaries now, buy the distribution later, per product, on evidence.</p>
+
+          <div class="tscroll">
+            <table>
+              <thead><tr>
+                <th>Part</th><th class="axis-now">Now (start)</th><th class="axis-future">Future (scale)</th><th>Notes / reason</th>
+              </tr></thead>
+              <tbody>
+                <tr>
+                  <td class="part">Backend</td>
+                  <td><b>Modular monolith</b> &mdash; one deployable, N product modules behind a manifest contract. Worker and realtime media are already separate.</td>
+                  <td><b>Service-based &rarr; microservices</b>, extracted per product as triggers fire. Then <b>cell-based</b>: each region runs a full stack for a slice of tenants.</td>
+                  <td class="reason">One deployable means one transaction, one deploy, one stack trace. The module contract makes extraction a move, not a rewrite. Worker and media are split on day one because their scaling profile genuinely differs.</td>
+                </tr>
+                <tr>
+                  <td class="part">Admin</td>
+                  <td><b>Separate Next.js app</b>, same API, elevated permission set.</td>
+                  <td>Same app hardened &mdash; private network, SSO, mandatory MFA; splits into ops and support consoles when the audiences diverge.</td>
+                  <td class="reason">Blast radius. An XSS or logic bug in an internal tool must not be reachable from a customer session. The split costs almost nothing because it shares the design system and SDK.</td>
+                </tr>
+                <tr>
+                  <td class="part">Frontend</td>
+                  <td><b>One Next.js app</b> &mdash; platform shell (nav, auth, launcher, global search) plus feature-based routes per product.</td>
+                  <td><b>Micro-frontends</b> via Module Federation: the shell stays, each product UI deploys independently.</td>
+                  <td class="reason">With 3&ndash;20 products one app is faster. The trigger is not product count &mdash; it is the shared deploy pipeline becoming the bottleneck at roughly ten frontend teams.</td>
+                </tr>
+                <tr>
+                  <td class="part">API layer</td>
+                  <td><b>One versioned REST API</b> <code>/v1/{product}</code> with OpenAPI. Gateway concerns are global guards.</td>
+                  <td><b>Dedicated gateway</b> (Envoy/Kong), <b>BFF per client</b>, <b>GraphQL federation</b> for aggregation, <b>gRPC</b> between services.</td>
+                  <td class="reason">Clients are coded against <code>/v1/calendar/&hellip;</code> from day one. When Calendar moves to its own service the gateway re-points that prefix and no client changes. The URL shape is what buys the migration.</td>
+                </tr>
+                <tr>
+                  <td class="part">Database</td>
+                  <td><b>One PostgreSQL cluster, one schema per product</b> + a <code>platform</code> schema. Row-Level Security on every tenant-owned table.</td>
+                  <td><b>Database per service</b>, tenant <b>sharding</b> (Citus/Vitess) for the largest products, <b>CQRS</b> read models, per-region clusters.</td>
+                  <td class="reason">Schema-per-product means a product's tables are already disjoint. Extraction is a <code>pg_dump --schema=</code> and a new connection string &mdash; not an untangling of foreign keys.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub" style="margin-top:14px">When a product leaves the monolith</h3>
+          <p class="lede">A product is extracted when at least one of these is <em>measurably</em> true.
+          Nothing else counts &mdash; and specifically, &ldquo;it feels big&rdquo; and &ldquo;microservices are modern&rdquo; do not.</p>
+
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Trigger</th><th>Measurable threshold</th></tr></thead>
+              <tbody>
+                <tr><td class="part">Divergent scaling</td><td>Resource-per-request differs from the platform median by &gt;5&times;, or it needs hardware the monolith has not (GPU, high bandwidth, stateful media).</td></tr>
+                <tr><td class="part">Fault isolation</td><td>Its failure modes threaten the platform SLO &mdash; it can exhaust connections or memory shared with 99 others.</td></tr>
+                <tr><td class="part">Team contention</td><td>More than two teams on one pipeline, or median PR-to-production &gt;30 min because of unrelated tests.</td></tr>
+                <tr><td class="part">Cadence conflict</td><td>It must ship hourly while the platform ships daily, or needs a maintenance window the platform cannot take.</td></tr>
+                <tr><td class="part">Compliance boundary</td><td>Its data must sit in a separate jurisdiction or certification scope that would otherwise widen the audit boundary to everything.</td></tr>
+                <tr><td class="part">Runtime mismatch</td><td>It needs a runtime the monolith cannot host &mdash; ML inference, video transcoding, a native SDK.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="lede">Two components are <em>born extracted</em> because they meet a trigger on day one:
+          the <b>worker</b> (long jobs starve short requests) and the <b>media plane</b> (stateful,
+          bandwidth-bound, different runtime). That is the trigger list applied honestly, not an exception to it.</p>
+
+          <h3 class="sub">Handling 100+ products</h3>
+          <div class="items">
+            <div class="item">
+              <h4>One declarative manifest</h4>
+              <p>Each product declares key, DB schema, API prefix, permissions, published and subscribed events, search documents, quotas and plan availability. Routing, RBAC, indexing, billing and the app launcher are all derived from it. There is no second place to register a product.</p>
+            </div>
+            <div class="item">
+              <h4>Boot-time graph validation <span class="vtag">verified</span></h4>
+              <p>Before a request is served, the registry checks every manifest together: duplicate keys, schemas or prefixes, permission collisions, permissions outside a product's namespace, events subscribed to that nobody publishes. Any error refuses the boot.</p>
+            </div>
+            <div class="item">
+              <h4>A generator <span class="vtag">verified</span></h4>
+              <p><code>pnpm gen:product notes</code> scaffolds the manifest, module, controller, service and docs, and wires the composition root. In this repo it produced a fourth product that booted, routed and synced permissions with zero manual edits.</p>
+            </div>
+            <div class="item">
+              <h4>A kernel that keeps products small</h4>
+              <p>Auth, tenancy, RBAC, audit, rate limiting, search, notifications, storage and quotas live in the kernel, so a product is only its domain logic. A cross-cutting fix ships once for 100 products instead of 100 times.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 FOLDER -->
+      <section id="a2">
+        <div class="shead"><span class="num">02</span><h2>What will the folder structure be like?</h2></div>
+        <div class="stack">
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Part</th><th class="axis-now">Now (start)</th><th class="axis-future">Future (scale)</th><th>Notes / reason</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="part">Backend</td>
+                  <td>One app: <code>src/platform/</code> (kernel), <code>src/products/{key}/</code> (one folder per product), <code>src/shared/</code> (infrastructure).</td>
+                  <td>Each extracted product becomes <code>services/{key}/</code> with the same internal layout; the kernel becomes <code>packages/platform-kernel/</code>.</td>
+                  <td class="reason">A product folder is already a complete, self-contained unit. Extraction is <code>git mv</code>, not reorganisation.</td>
+                </tr>
+                <tr>
+                  <td class="part">Admin</td>
+                  <td><code>apps/admin/</code> &mdash; separate Next.js app sharing <code>@helix/ui</code> and <code>@helix/sdk</code>.</td>
+                  <td>Same shape; splits into <code>admin-ops/</code> and <code>admin-support/</code> when the audiences diverge.</td>
+                  <td class="reason">Separate deployable from day one for blast radius. Never a separate repo &mdash; sharing the design system matters more.</td>
+                </tr>
+                <tr>
+                  <td class="part">Frontend</td>
+                  <td><code>apps/web/</code> &mdash; shell in <code>src/app/</code>, product UIs in <code>src/app/apps/{key}/</code>, cross-cutting logic in <code>src/features/</code>.</td>
+                  <td>Each product UI becomes <code>apps/web-{key}/</code> exposing a federated remote; <code>apps/web-shell/</code> hosts them.</td>
+                  <td class="reason">Product UIs are already isolated by route folder, so the micro-frontend split is a move plus a federation config.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <div class="kicker">The tree as it stands</div>
+            <div class="tree"><pre>apps/
+  <span class="h">api/</span>
+    prisma/          <span class="c">schema.prisma &middot; migrations &middot; sql/ (RLS + isolation proof) &middot; seed.ts</span>
+    src/
+      app.module.ts  <span class="c">composition root &mdash; the security model, readable top to bottom</span>
+      <span class="h">platform/</span>      <span class="c">THE KERNEL &mdash; true for all 100+ products</span>
+        auth/ rbac/ tenancy/ rate-limit/ audit/ events/
+        search/ storage/ notifications/ feature-flags/ registry/ health/
+      <span class="h">products/</span>      <span class="c">ONE FOLDER PER PRODUCT &mdash; 100+ of these</span>
+        calendar/    <span class="c">manifest &middot; module &middot; controller &middot; service &middot; dto/ &middot; README</span>
+        meet/  drive/  notes/            <span class="c">notes/ was generated</span>
+      shared/        <span class="c">config &middot; prisma &middot; redis &middot; http (guards, filters, decorators)</span>
+  web/               <span class="c">platform shell + one route folder per product UI</span>
+  admin/             <span class="c">internal console &mdash; separate deployable</span>
+  worker/            <span class="c">outbox relay &middot; queue consumers &middot; scheduled maintenance</span>
+packages/
+  <span class="h">core/</span>              <span class="c">THE CONTRACT &mdash; manifest, EventBus, tenant context, registry</span>
+  sdk/ ui/ config/   <span class="c">typed client &middot; design system &middot; the cross-product import ban</span>
+infra/               <span class="c">docker-compose &middot; kubernetes &middot; terraform</span>
+tools/generators/    <span class="c">pnpm gen:product &mdash; product #101 in one command</span>
+docs/                <span class="c">the six answers &middot; ADRs &middot; verification transcript</span></pre></div>
+          </div>
+
+          <p class="lede">The future tree is <em>the same tree</em>: folders move up a level and gain a
+          <code>package.json</code>. Nothing is renamed or re-layered. That is only true because the
+          boundaries were real from the start.</p>
+
+          <div class="items">
+            <div class="item"><h4>Separation of concerns</h4><p>Three directories, three reasons to change: kernel, domain, infrastructure. A product folder contains no infrastructure and no security code.</p></div>
+            <div class="item"><h4>Feature-based, never layer-based</h4><p>A tree of <code>controllers/ services/ models/</code> makes every product change touch every directory &mdash; and makes extraction impossible.</p></div>
+            <div class="item"><h4>Machine-enforced boundaries</h4><p>An ESLint rule forbids cross-product imports; per-schema grants forbid cross-product reads; the registry forbids namespace collisions. Boundaries kept by good intentions do not survive 100 products.</p></div>
+            <div class="item"><h4>Docs that travel with the code</h4><p>Every product ships a README with its boundaries and its extraction checklist, so the knowledge is not in one architect's head.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 SYSTEM DESIGN -->
+      <section id="a3">
+        <div class="shead"><span class="num">03</span><h2>System design</h2></div>
+        <div class="stack">
+          <p class="lede">Users &rarr; frontend &rarr; API layer &rarr; backend services &rarr; database, cache, queue and storage &mdash;
+          with every request passing the same five gates before any product code runs.</p>
+
+          <div class="diagram">
+            <div class="dgrid">
+              <div class="band">
+                <div class="blabel">Clients</div>
+                <div class="bbox"><div class="brow">
+                  <span class="chip">Web app &middot; Next.js</span><span class="chip">Admin console</span>
+                  <span class="chip">Mobile</span><span class="chip">Partner API</span><span class="chip">Webhooks</span>
+                </div></div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">Edge</div>
+                <div class="bbox"><div class="brow">
+                  <span class="chip">CDN</span><span class="chip">WAF &middot; bot rules</span><span class="chip">DDoS</span>
+                  <span class="chip">TLS 1.3</span><span class="chip">Geo-routing</span>
+                </div></div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">API gateway</div>
+                <div class="bbox accent">
+                  <div class="btitle">Every request, in this order &mdash; no product can opt out</div>
+                  <ul class="gate">
+                    <li><span class="gn">1</span><span><b>Authenticate</b> &mdash; verify JWT or API key</span><span class="gc">401</span></li>
+                    <li><span class="gn">2</span><span><b>Resolve tenant</b> &mdash; from the token, never a header</span><span class="gc">403</span></li>
+                    <li><span class="gn">3</span><span><b>Rate limit</b> &mdash; per tenant, scaled by plan tier</span><span class="gc">429</span></li>
+                    <li><span class="gn">4</span><span><b>Entitle &amp; authorise</b> &mdash; product enabled? permission held?</span><span class="gc">403</span></li>
+                    <li><span class="gn">5</span><span><b>Audit</b> &mdash; record the outcome, allowed or denied</span><span class="gc">&mdash;</span></li>
+                  </ul>
+                </div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">Platform kernel</div>
+                <div class="bbox"><div class="brow">
+                  <span class="chip k">Identity &amp; auth</span><span class="chip k">Tenancy</span><span class="chip k">RBAC</span>
+                  <span class="chip k">Billing &amp; quotas</span><span class="chip k">Audit</span><span class="chip k">Search</span>
+                  <span class="chip k">Notifications</span><span class="chip k">Storage</span><span class="chip k">Feature flags</span>
+                  <span class="chip k">Product registry</span>
+                </div></div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">Products &amp;<br>separate planes</div>
+                <div class="bbox">
+                  <div class="btitle">Uniform product modules &mdash; no product may import another</div>
+                  <div class="brow">
+                    <span class="chip p">Calendar</span><span class="chip p">Meet</span><span class="chip p">Drive</span>
+                    <span class="chip p">Notes</span><span class="chip p">&hellip; #101</span>
+                  </div>
+                  <div class="btitle" style="margin-top:12px">Split on day one &mdash; different scaling profile</div>
+                  <div class="brow">
+                    <span class="chip">Worker &middot; outbox relay, jobs, cron</span>
+                    <span class="chip">Realtime media &middot; WebRTC SFU, stateful</span>
+                  </div>
+                </div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">Data</div>
+                <div class="bbox"><div class="brow">
+                  <span class="chip">PostgreSQL &middot; schema per product &middot; RLS &middot; replicas</span>
+                  <span class="chip">Redis &middot; cache, limits, queues</span>
+                  <span class="chip">Queue &middot; outbox &rarr; BullMQ &rarr; Kafka</span>
+                  <span class="chip">Object storage &middot; pre-signed only</span>
+                  <span class="chip">Search &middot; PG FTS &rarr; OpenSearch</span>
+                  <span class="chip">KMS &middot; per-tenant keys</span>
+                </div></div>
+              </div>
+              <div class="drop"></div>
+              <div class="band">
+                <div class="blabel">Observability</div>
+                <div class="bbox"><div class="brow">
+                  <span class="chip">Traces &middot; OpenTelemetry</span><span class="chip">Metrics &middot; Prometheus</span>
+                  <span class="chip">Logs &middot; structured, correlation-joined</span><span class="chip">SLO alerting</span>
+                </div></div>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="sub">How products cooperate without coupling</h3>
+          <p class="lede">This is the mechanism that makes 100 products behave like one product &mdash; and the
+          reason any of them can be extracted later without the others changing.</p>
+
+          <div class="diagram">
+            <div class="flow">
+              <div class="fnode">
+                <div class="ft">POST /v1/meet/rooms &rarr; Meet</div>
+                <div class="fd">Writes the room row <em>and</em> the outbox row in one database transaction</div>
+              </div>
+              <div class="farrow">publishes <code>meet.room.scheduled</code></div>
+              <div class="fbus">
+                <div class="ft">EventBus &mdash; in-process today, Kafka later, same interface</div>
+              </div>
+              <div class="farrow">fan-out to subscribers</div>
+              <div class="fanout">
+                <div class="fnode"><div class="ft">Calendar</div><div class="fd">Creates the matching event &mdash; and publishes its own, so it is indexed too</div></div>
+                <div class="fnode"><div class="ft">Search</div><div class="fd">Indexes the room into the unified index</div></div>
+                <div class="fnode"><div class="ft">Notifications</div><div class="fd">Emails the attendees</div></div>
+              </div>
+            </div>
+          </div>
+
+          <p class="lede">Meet does not import Calendar. Calendar does not import Meet. Neither knows Search
+          or Notifications exist. The <b>transactional outbox</b> makes it safe: the domain row and the event
+          row commit together, so no event exists for a change that rolled back, and no committed change
+          fails to publish.</p>
+
+          <h3 class="sub">What each major component is for</h3>
+          <div class="items">
+            <div class="item"><h4>API gateway</h4><p>The single front door. Putting authn, tenancy, rate limiting, entitlement and audit here means a product <em>physically cannot ship without them</em> &mdash; the decisive property when many teams contribute.</p></div>
+            <div class="item"><h4>Authentication</h4><p>Short-lived stateless access JWT keeps the hot path free of session lookups; server-side rotating refresh sessions keep revocation instant. Reuse of a revoked token revokes every session for that user.</p></div>
+            <div class="item"><h4>Authorization / RBAC</h4><p>Permissions are resolved at token-mint time and cached, so authorising a request is a string comparison, not a three-table join. At 50k req/s that is the whole difference.</p></div>
+            <div class="item"><h4>Product registry</h4><p>Loads and validates the whole manifest graph at boot. The guardrail that keeps 100 products coherent without central review of every change.</p></div>
+            <div class="item"><h4>PostgreSQL</h4><p>System of record. Schema per product for isolation; RLS for a second, independent enforcement of tenant boundaries; replicas for read-heavy products and reporting.</p></div>
+            <div class="item"><h4>Redis</h4><p>Cache, rate-limit counters and queues, all tenant-prefixed. Caching tenant context and permissions removes the two queries that would otherwise sit on 100% of requests.</p></div>
+            <div class="item"><h4>Object storage</h4><p>Bytes never pass through the API &mdash; clients get a pre-signed URL. A 5&nbsp;GB upload consumes no application capacity. Keys are prefixed per tenant, so deletion, encryption and lifecycle are prefix operations.</p></div>
+            <div class="item"><h4>Unified search</h4><p>Users search for a thing, not for the product that owns it. Products publish events and never talk to a search engine, so Postgres FTS &rarr; OpenSearch is a one-file change.</p></div>
+            <div class="item"><h4>Notifications</h4><p>One pipeline for in-app, email, push and webhook. Preferences, quiet hours, digests and unsubscribes are built once &mdash; and a badly-behaved product cannot spam a customer.</p></div>
+            <div class="item"><h4>Audit log</h4><p>Append-only; <code>UPDATE</code> and <code>DELETE</code> are revoked from the app role at the database. Written by kernel interceptor and exception filter, so coverage cannot regress when a team adds an endpoint.</p></div>
+            <div class="item"><h4>Worker</h4><p>Separate from day one: long jobs and short requests cannot share a process without the slow work eventually starving the fast work.</p></div>
+            <div class="item"><h4>Feature flags</h4><p>Percentage rollout, per-tenant enablement, and kill switches &mdash; the fastest lever in an incident, because it disables an expensive path without a deploy.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 TECH -->
+      <section id="a4">
+        <div class="shead"><span class="num">04</span><h2>What technology will be used?</h2></div>
+        <div class="stack">
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Part</th><th class="axis-now">Now (start)</th><th class="axis-future">Future (scale)</th><th>Notes / reason</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="part">Backend</td>
+                  <td><b>TypeScript + NestJS</b> (modular monolith), Prisma, Node 22</td>
+                  <td>Same for most products. <b>Go</b> for extracted hot paths, <b>Rust/C++</b> for the media SFU, <b>Python</b> for ML products</td>
+                  <td class="reason">NestJS's module, DI and global-guard model <em>is</em> the product-module contract &mdash; the kernel is expressible in the framework rather than fought against it. Polyglot only where a trigger justifies it: the event contract is JSON, so language becomes a per-service decision.</td>
+                </tr>
+                <tr>
+                  <td class="part">Admin</td>
+                  <td><b>Next.js + React 19</b>, shared design system</td>
+                  <td>Same, plus SSO/OIDC, mandatory MFA, IP allow-list; ops and support consoles split</td>
+                  <td class="reason">Reusing the customer stack means one hiring profile and one design system. It stays a separate <em>deployable</em>, not a separate stack.</td>
+                </tr>
+                <tr>
+                  <td class="part">Frontend</td>
+                  <td><b>Next.js 15 App Router</b>, React 19, server components for data-heavy pages</td>
+                  <td><b>Module Federation</b> micro-frontends; edge rendering per region</td>
+                  <td class="reason">Server components keep tokens server-side and cut client JS &mdash; it matters when a launcher may list 100 products. The route-folder model is already the micro-frontend seam.</td>
+                </tr>
+                <tr>
+                  <td class="part">API layer</td>
+                  <td>REST + <b>OpenAPI 3.1</b>, URI versioning per product, generated typed SDK</td>
+                  <td><b>Envoy/Kong</b>, <b>gRPC</b> internally, <b>GraphQL federation</b> for aggregation, WebSocket/SSE</td>
+                  <td class="reason">REST first because it is CDN-cacheable, debuggable with curl and consumable by partners. gRPC and GraphQL arrive where they earn their cost.</td>
+                </tr>
+                <tr>
+                  <td class="part">Database</td>
+                  <td><b>PostgreSQL 17</b> &mdash; schema per product, RLS, PgBouncer, one read replica</td>
+                  <td><b>Citus/Vitess</b> sharding, DB per service, <b>ClickHouse</b> for analytics, per-region clusters</td>
+                  <td class="reason">Postgres covers relational integrity, JSONB, full-text search, partitioning and <code>SKIP LOCKED</code> queues well enough that one engine covers years one to three.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="sub">What is deliberately <em>not</em> adopted yet</h3>
+          <p class="lede">Every row is a cost avoided today with a written condition for paying it later.
+          This table is as much the architecture as the components that were chosen.</p>
+
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Not adopted</th><th>Why not yet</th><th class="axis-future">Trigger to adopt</th></tr></thead>
+              <tbody>
+                <tr><td class="part">Microservices</td><td class="reason">Highest price for the decision the team is least qualified to make: where the boundaries are.</td><td>Any product meets an extraction trigger.</td></tr>
+                <tr><td class="part">Kafka</td><td class="reason">BullMQ handles job processing; Kafka's value is replay and multiple consumer groups.</td><td>First service extraction, or a consumer needing replay.</td></tr>
+                <tr><td class="part">Separate search cluster</td><td class="reason">Postgres FTS is genuinely good to a few million documents per tenant.</td><td>&gt;5M docs per tenant, or relevance Postgres cannot express.</td></tr>
+                <tr><td class="part">Service mesh</td><td class="reason">A control plane, sidecar latency and a debugging surface &mdash; for three deployables.</td><td>&gt;10 services needing mTLS and traffic policy.</td></tr>
+                <tr><td class="part">GraphQL</td><td class="reason">REST + OpenAPI already generates a typed SDK and caches at the CDN.</td><td>A client aggregating across &ge;3 products per round trip.</td></tr>
+                <tr><td class="part">Multi-region active-active</td><td class="reason">Doubles operational complexity for a single-region customer base.</td><td>A residency clause, a latency SLO, or a costed outage.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 SECURITY -->
+      <section id="a5">
+        <div class="shead"><span class="num">05</span><h2>Security &amp; scalability</h2></div>
+        <div class="stack">
+          <p class="lede">Items marked <span class="vtag">verified</span> were executed against the running
+          system; the transcripts are below.</p>
+
+          <div class="kicker">Security</div>
+          <div class="items">
+            <div class="item"><h4>Authentication</h4><p>scrypt with per-password salt. 15-minute access JWT for a stateless hot path; opaque 30-day refresh token, hashed at rest, rotated on every use. Replay of a revoked token revokes every session for that user. Login does comparable work whether or not the account exists.</p></div>
+            <div class="item"><h4>Authorization / RBAC <span class="vtag">verified</span></h4><p>user &rarr; membership &rarr; roles &rarr; permissions, keyed <code>product.resource.action</code> and declared by manifests. Routes are protected by default; opting out needs <code>@Public()</code>. A <code>member</code> was refused <code>calendar.event.delete</code>; the owner succeeded.</p></div>
+            <div class="item"><h4>Multi-tenancy <span class="vtag">verified</span></h4><p>Three layers: tenant from the token never a header; <code>tenantId</code> on every query; Postgres RLS as the backstop. A forgotten filter returns <em>zero rows</em>, not another tenant's data.</p></div>
+            <div class="item"><h4>API security</h4><p>TLS 1.3, Helmet headers, CORS allow-list, whitelisting validation so mass-assignment is impossible, parameterised queries throughout, one RFC 9457 error shape, per-product versioning.</p></div>
+            <div class="item"><h4>Quotas <span class="vtag">verified</span></h4><p>Per-plan limits are declared in each product&rsquo;s manifest and enforced by the kernel. The product names a metric; the kernel resolves the tier, finds the limit and refuses with <code>402</code>. Counters roll back on refusal, so two concurrent requests at the limit cannot both pass.</p></div>
+            <div class="item"><h4>Rate limiting <span class="vtag">verified</span></h4><p>Per-tenant sliding window in Redis, one atomic round trip, scaled by plan tier. Per tenant rather than per IP, because tenants share NATs and the resource protected is capacity per paying customer.</p></div>
+            <div class="item"><h4>Session handling <span class="vtag">verified</span></h4><p>Web tokens live in httpOnly cookies set by a server action, never in <code>localStorage</code> &mdash; an XSS in any one of 100 product UIs must not be able to read the token and impersonate the user across every other product.</p></div>
+            <div class="item"><h4>Data encryption</h4><p>TLS in transit, volume encryption at rest, envelope encryption with per-tenant KMS keys &mdash; so destroying one key crypto-shreds one customer and makes a deletion request provable.</p></div>
+            <div class="item"><h4>Secure file storage</h4><p>Pre-signed URLs only, MIME allow-list, size caps, async malware scanning that gates download, private buckets, versioning and object lock.</p></div>
+            <div class="item"><h4>Audit logs <span class="vtag">verified</span></h4><p>Append-only, written by the kernel, covering <em>denials as well as successes</em> &mdash; a trail that records only what succeeded is blind to an attacker probing for permissions they lack.</p></div>
+            <div class="item"><h4>Backup &amp; recovery</h4><p>Snapshots plus continuous WAL archiving for PITR to any second in 35 days. RPO &le; 5 min, RTO &le; 1 h. Restores tested on a schedule &mdash; an untested backup is a hypothesis.</p></div>
+          </div>
+
+          <div class="kicker" style="margin-top:26px">Scalability</div>
+          <div class="items">
+            <div class="item"><h4>Database scaling</h4><p>Cheapest first: indexes leading with <code>tenantId</code> and cursor pagination, pooling, read replicas, partitioning, vertical scale, then schema&rarr;database split, then tenant sharding, then CQRS read models.</p></div>
+            <div class="item"><h4>Caching</h4><p>CDN, HTTP <code>ETag</code>, application cache for tenant context and permissions, per-product query cache. Correctness comes from event-driven invalidation, not from short TTLs alone.</p></div>
+            <div class="item"><h4>Load balancing</h4><p>Geo-DNS to the nearest healthy region; L7 least-outstanding-requests across zones; removal driven by <code>/readyz</code> so a replica with a sick dependency drains instead of erroring.</p></div>
+            <div class="item"><h4>High availability</h4><p>&ge;6 replicas, zone spread, PDB at 75%, <code>maxUnavailable: 0</code>, synchronous DB standby. Products declare soft dependencies and must degrade gracefully &mdash; scheduling a Meet room still succeeds if Calendar is down.</p></div>
+            <div class="item"><h4>Disaster recovery</h4><p>Tiered objectives (auth &le;15 min, standard products &le;1 h, analytics &le;24 h), regions as Terraform modules, rehearsed runbooks, cell-scoped blast radius, kill switches.</p></div>
+            <div class="item"><h4>Async everywhere slow</h4><p>Anything over ~200 ms is a queue job, and uploads bypass the API entirely. The request path stays fast because nothing slow is allowed on it.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 FUTURE -->
+      <section id="a6">
+        <div class="shead"><span class="num">06</span><h2>Future architecture</h2></div>
+        <div class="stack">
+          <p class="lede">The stages are triggered by measurements, not by calendar time or product count.
+          A platform can sit at stage one with forty products and be entirely correct.</p>
+
+          <div class="stages">
+            <div class="stage">
+              <div class="sn">01</div>
+              <div>
+                <h4>Modular monolith</h4>
+                <div class="when">~10 products &middot; &lt;10k tenants &middot; 1 region</div>
+                <p>One API, one worker, one media plane, one Postgres, one Redis, Postgres full-text search.
+                Every boundary that later extraction depends on already exists.</p>
+              </div>
+            </div>
+            <div class="stage">
+              <div class="sn">02</div>
+              <div>
+                <h4>Distributed services</h4>
+                <div class="when">Trigger &mdash; the first product meets an extraction threshold</div>
+                <p>Search, notifications and the busiest product move out first. Kafka replaces BullMQ as the
+                backbone; the <code>EventBus</code> interface, and therefore every product, is unchanged. The
+                gateway re-points prefixes and clients notice nothing. The other ~25 products stay put.</p>
+              </div>
+            </div>
+            <div class="stage">
+              <div class="sn">03</div>
+              <div>
+                <h4>Selective microservices</h4>
+                <div class="when">Trigger &mdash; team topology, more than load</div>
+                <p>~15 services, each owned end-to-end. Database per service; cross-service reads become
+                read models built from the event stream. Schema registry, sagas, micro-frontends, service mesh.
+                This is where the architecture gets <em>harder</em> &mdash; worth it only because 60 products and 15
+                teams on one deployable is worse. The long tail stays in the monolith permanently.</p>
+              </div>
+            </div>
+            <div class="stage">
+              <div class="sn">04</div>
+              <div>
+                <h4>Global infrastructure</h4>
+                <div class="when">Trigger &mdash; a residency clause, a latency SLO, or a costed outage</div>
+                <p>Cell-based topology: a cell is a complete stack serving a slice of tenants, so a failure is
+                scoped to a cell and a bad deploy rolls out cell by cell. Tenant data stays in its home region;
+                identity metadata replicates everywhere.</p>
+              </div>
+            </div>
+            <div class="stage">
+              <div class="sn">05</div>
+              <div>
+                <h4>Platform as a product</h4>
+                <div class="when">Trigger &mdash; external developers, or a marketplace</div>
+                <p>The product manifest &mdash; the internal contract from day one &mdash; becomes the public extension
+                contract. Third-party products declare permissions, events, quotas and UI entry points exactly
+                as internal ones do. This is the design's long-term payoff.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="sub">Why the evolution is credible</h3>
+          <p class="lede">Four decisions made at stage one, none requiring anyone to predict the future:</p>
+          <div class="tscroll">
+            <table>
+              <thead><tr><th>Decision made now</th><th class="axis-future">What it buys later</th></tr></thead>
+              <tbody>
+                <tr><td class="part">Products own a schema, never read another's</td><td>Extracting a service's data is a schema dump, not a data migration</td></tr>
+                <tr><td class="part">Cross-product traffic only via a named-event interface</td><td>Swapping in-process for Kafka is one class; product code untouched</td></tr>
+                <tr><td class="part">Clients address products by URL prefix</td><td>The gateway re-points a prefix; no client ever changes</td></tr>
+                <tr><td class="part">A kernel products cannot bypass</td><td>A security fix ships once for 100 products, before and after the split</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="lede">None of these is expensive now. All are close to impossible to retrofit at stage
+          three. <b>That asymmetry &mdash; cheap now, impossible later &mdash; is the only sound reason to do
+          architectural work ahead of need</b>, and it is the criterion every decision here was measured against.</p>
+        </div>
+      </section>
+
+      <!-- PROOF -->
+      <section id="proof">
+        <div class="shead"><span class="num">&mdash;</span><h2>Verification</h2></div>
+        <div class="stack">
+          <p class="lede">A design document that implies more than it demonstrates is worse than one that
+          admits its edges. These ran against the live system.</p>
+
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>Tenant isolation is enforced by the database, not just by code</span></div>
+            <div class="term"><pre><span class="dim">-- session is tenant A; the query has NO tenant filter at all</span>
+<span class="cmd">SELECT title FROM calendar.events;</span>
+  SECRET-A                          <span class="dim">(1 row &mdash; tenant B's row is invisible)</span>
+
+<span class="dim">-- explicitly asking for another tenant's rows</span>
+<span class="cmd">SELECT count(*) FROM calendar.events WHERE "tenantId" = '&lt;tenant-A&gt;';</span>
+  leaked_rows: <span class="ok">0</span>
+
+<span class="dim">-- writing a row for another tenant</span>
+  NOTICE: <span class="ok">PASS: cross-tenant insert blocked by RLS policy</span>
+
+<span class="dim">-- and with no tenant context set at all</span>
+  rows_visible_without_tenant: <span class="ok">0</span>   <span class="dim">&larr; zero rows, never "all rows"</span></pre></div>
+          </div>
+
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>Cross-product behaviour with zero coupling</span></div>
+            <div class="term"><pre><span class="cmd">POST /v1/meet/rooms  {"title":"Quarterly platform review"}</span>
+  Meet created room ayu-jusp-unu
+
+<span class="cmd">GET /v1/calendar/events</span>
+  Quarterly platform review        <span class="ok">&lt;- created by the Meet event</span>
+
+<span class="cmd">GET /v1/platform/search?q=platform+review</span>
+  [calendar] calendar.event   Quarterly platform review
+  [meet    ] meet.room        Quarterly platform review</pre></div>
+          </div>
+
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>RBAC, entitlement and the audit trail</span></div>
+            <div class="term"><pre><span class="cmd">member  DELETE /v1/calendar/events/{id}</span>
+  <span class="no">403 forbidden</span> &mdash; Missing permission: calendar.event.delete
+<span class="cmd">owner   DELETE /v1/calendar/events/{id}</span>
+  <span class="ok">{"deleted": true}</span>
+
+<span class="dim">-- with the Meet product disabled for this workspace</span>
+<span class="cmd">POST /v1/meet/rooms</span>
+  <span class="no">403 product not enabled</span> &mdash; The "meet" product is not enabled for this workspace
+
+<span class="dim">-- the kernel recorded all of it, denials included</span>
+ product  | action                          | outcome | reason
+----------+---------------------------------+---------+---------------------------------
+ meet     | POST /v1/meet/rooms             | <span class="no">denied</span>  | The "meet" product is not enabled
+ calendar | DELETE /v1/calendar/events/:id  | <span class="ok">allowed</span> |
+ calendar | DELETE /v1/calendar/events/{id} | <span class="no">denied</span>  | Missing permission: calendar.eve&hellip;
+ meet     | POST /v1/meet/rooms             | <span class="ok">allowed</span> |</pre></div>
+          </div>
+
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>Product #101 is a command &mdash; and a bad manifest cannot start the platform</span></div>
+            <div class="term"><pre><span class="cmd">$ pnpm gen:product notes --name "Helix Notes" --category productivity</span>
+  Created product "notes" &mdash; manifest, module, controller, service, README
+  Registered in app.module.ts and product-registry.service.ts
+
+<span class="dim">-- next boot, with zero manual edits:</span>
+  [RouterExplorer] Mapped {/v1/notes/items, GET} route
+  [RouterExplorer] Mapped {/v1/notes/items, POST} route
+  [registry] <span class="ok">Registered 4 products, 15 permissions</span>
+
+<span class="dim">-- then: make "notes" declare a permission belonging to "calendar"</span>
+  ERROR [registry] [notes] Permission "calendar.event.read" must be namespaced under "notes."
+  ERROR [registry] [notes] Permission "calendar.event.read" already declared by "calendar"
+  <span class="no">Error: Product registry validation failed with 2 error(s). Refusing to start.</span></pre></div>
+          </div>
+
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>Quotas enforced from the limits a product declares</span></div>
+            <div class="term"><pre><span class="dim">business plan allows 100,000 calendar events/month (from calendar.manifest.ts)</span>
+
+<span class="cmd">POST /v1/calendar/events   # event #100,000</span>
+  <span class="ok">created: At the limit</span>
+
+<span class="cmd">POST /v1/calendar/events   # event #100,001</span>
+  <span class="no">402 quota exceeded</span> &mdash; Monthly eventsPerMonth limit reached for calendar on the business plan
+
+  counter after refusal: 100000   <span class="dim">(rolled back, no drift)</span></pre></div>
+          </div>
+
+          <div class="kicker" style="margin-top:30px">What is not verified</div>
+          <div class="items">
+            <div class="item"><h4>Load and failover</h4><p>No load test, chaos test or failover drill was run. The scaling figures are design targets, not measurements.</p></div>
+            <div class="item"><h4>Kubernetes, Terraform, multi-region</h4><p>Manifests and the Terraform cell module are written and reviewed, but never applied to a cluster or a cloud account. Kafka, OpenSearch, sharding and cells are the future column throughout &mdash; nothing here runs them.</p></div>
+            <div class="item"><h4>The media plane</h4><p>Designed and justified, with its data model in place, but not implemented.</p></div>
+            <div class="item"><h4>No end-to-end test suite</h4><p>38 automated tests cover the registry rules, RBAC wildcard matching, password hashing and the product-manifest contracts. Behaviour that only exists once the system is running is covered by <code>verify.sh</code> transcripts, not by tests that would fail CI.</p></div>
+            <div class="item"><h4>Remaining hardening</h4><p>Most product reads rely on the application-level tenant filter with RLS as the backstop; connecting the API as the restricted <code>helix_app</code> role everywhere is the outstanding step. The worker&rsquo;s quota-flush job is written but not exercised here.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="close">
+        <div><h4>Run it</h4><p><code>pnpm infra:up &amp;&amp; pnpm db:migrate &amp;&amp; pnpm db:seed</code>, then <code>./scripts/verify.sh</code> to reproduce every transcript above.</p></div>
+        <div><h4>Read it</h4><p>Six numbered answers in <code>docs/</code>, five decision records in <code>docs/adr/</code>, and the full transcript in <code>docs/VERIFICATION.md</code>.</p></div>
+        <div><h4>The single idea</h4><p><b>Boundaries on day one; distribution on evidence.</b> Everything else follows from that.</p></div>
+      </div>
+
+    </main>
+  </div>
+</div>

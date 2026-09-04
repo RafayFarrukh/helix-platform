@@ -22,6 +22,7 @@ frontends render from the live product registry.
 | 6 | [Future architecture](docs/06-future-architecture.md) |
 | — | **[Verification — every claim, executed, with output](docs/VERIFICATION.md)** |
 | — | [Decision records (ADRs)](docs/adr/) |
+| — | [The same document as a PDF](docs/Helix-Platform-Architecture.pdf) (17pp, A4) &mdash; rebuild with `./scripts/build-pdf.sh` |
 
 ---
 
