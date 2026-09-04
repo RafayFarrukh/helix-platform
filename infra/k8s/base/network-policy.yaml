@@ -1,0 +1,32 @@
+# Default deny, then allow exactly what is needed. Without this, a compromised
+# pod anywhere in the cluster can reach the database directly.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: helix-api-allowed
+spec:
+  podSelector:
+    matchLabels: { app: helix-api }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Only the gateway may call the API. Nothing talks to it directly.
+    - from: [{ podSelector: { matchLabels: { app: helix-gateway } } }]
+      ports: [{ protocol: TCP, port: 4000 }]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: postgres } } }]
+      ports: [{ protocol: TCP, port: 5432 }]
+    - to: [{ podSelector: { matchLabels: { app: redis } } }]
+      ports: [{ protocol: TCP, port: 6379 }]
+    - to: [{ podSelector: { matchLabels: { app: kafka } } }]
+      ports: [{ protocol: TCP, port: 9092 }]
+    # DNS, or nothing resolves.
+    - to: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } } }]
+      ports: [{ protocol: UDP, port: 53 }]

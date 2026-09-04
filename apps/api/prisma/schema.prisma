@@ -1,0 +1,599 @@
+// ---------------------------------------------------------------------------
+// Helix Platform — data model
+//
+// Design rules that hold for all 100+ products:
+//   1. Every tenant-owned row carries `tenantId`, and Postgres RLS enforces it.
+//   2. The platform kernel owns the `platform` schema. Products never write to it.
+//   3. Each product owns exactly one Postgres schema and may not read another's.
+//      Cross-product reads happen over the event bus / service interfaces.
+//   4. Because each product is already schema-isolated, extracting it into its
+//      own database later is a connection-string change, not a data migration.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["platform", "calendar", "meet", "drive"]
+}
+
+// ===========================================================================
+// PLATFORM KERNEL
+// ===========================================================================
+
+/// A tenant is the unit of isolation, billing, residency and blast radius.
+model Tenant {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  /// Data residency. Drives which regional cell may serve this tenant.
+  region    Region   @default(us)
+  tier      Tier     @default(free)
+  status    TenantStatus @default(active)
+  /// Per-tenant encryption key reference (envelope encryption in KMS).
+  kmsKeyId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships     Membership[]
+  roles           Role[]
+  productAccounts ProductAccount[]
+  auditLogs       AuditLog[]
+  files           FileObject[]
+  apiKeys         ApiKey[]
+  outbox          OutboxEvent[]
+  searchDocuments SearchDocument[]
+  notifications   Notification[]
+
+  @@index([region, status])
+  @@schema("platform")
+}
+
+/// Identity is platform-wide; access is tenant-scoped through Membership.
+/// This lets one human belong to many tenants without duplicate accounts.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  displayName  String
+  avatarUrl    String?
+  mfaSecret    String?
+  mfaEnabled   Boolean  @default(false)
+  status       UserStatus @default(active)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+  sessions    Session[]
+  auditLogs   AuditLog[]
+
+  @@schema("platform")
+}
+
+model Membership {
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+  status   MembershipStatus @default(active)
+  joinedAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles  MembershipRole[]
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@schema("platform")
+}
+
+/// Roles are per-tenant so a customer can define their own, while the platform
+/// ships system roles (owner/admin/member/guest) that cannot be deleted.
+model Role {
+  id          String  @id @default(uuid())
+  tenantId    String
+  key         String
+  name        String
+  description String?
+  isSystem    Boolean @default(false)
+
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+  members     MembershipRole[]
+
+  @@unique([tenantId, key])
+  @@schema("platform")
+}
+
+/// Permission keys are declared by product manifests (`calendar.event.create`)
+/// and synced into this table at boot. One catalogue for all 100+ products.
+model Permission {
+  key         String @id
+  product     String
+  description String
+
+  roles RolePermission[]
+
+  @@index([product])
+  @@schema("platform")
+}
+
+model RolePermission {
+  roleId        String
+  permissionKey String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([roleId, permissionKey])
+  @@schema("platform")
+}
+
+model MembershipRole {
+  membershipId String
+  roleId       String
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, roleId])
+  @@schema("platform")
+}
+
+/// Refresh-token sessions. Access tokens stay short-lived and stateless;
+/// revocation happens here, so logout is instant without a token blacklist.
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  tenantId         String?
+  refreshTokenHash String   @unique
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@schema("platform")
+}
+
+/// Machine credentials for partner/server-to-server access. Hashed, scoped,
+/// expiring, and independently rate-limited from user traffic.
+model ApiKey {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  prefix     String   @unique
+  secretHash String
+  scopes     String[]
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@schema("platform")
+}
+
+/// Which of the 100+ products a tenant has switched on, plus its plan and quota
+/// state. The gateway checks this before a product module is ever invoked.
+model ProductAccount {
+  id         String   @id @default(uuid())
+  tenantId   String
+  productKey String
+  status     ProductStatus @default(active)
+  tier       Tier     @default(free)
+  settings   Json     @default("{}")
+  quotaUsage Json     @default("{}")
+  enabledAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, productKey])
+  @@index([productKey, status])
+  @@schema("platform")
+}
+
+/// Append-only audit trail. Written by an interceptor, never by product code,
+/// so coverage does not depend on 100 teams remembering to log.
+model AuditLog {
+  id            String   @id @default(uuid())
+  tenantId      String
+  actorId       String?
+  actorType     ActorType @default(user)
+  product       String
+  action        String
+  resourceType  String
+  resourceId    String?
+  ip            String?
+  userAgent     String?
+  correlationId String
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, product, action])
+  @@schema("platform")
+}
+
+/// Transactional outbox: events are written in the same transaction as the state
+/// change, then relayed. Same table works whether the relay pushes in-process
+/// (today) or into Kafka (later) — the guarantee never changes.
+model OutboxEvent {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  payload       Json
+  correlationId String
+  actorId       String?
+  status        OutboxStatus @default(pending)
+  attempts      Int      @default(0)
+  lastError     String?
+  availableAt   DateTime @default(now())
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@schema("platform")
+}
+
+/// Object-storage metadata. Bytes live in S3; only pointers and ACL live here.
+model FileObject {
+  id          String   @id @default(uuid())
+  tenantId    String
+  product     String
+  bucket      String
+  storageKey  String   @unique
+  fileName    String
+  mimeType    String
+  sizeBytes   BigInt
+  checksum    String
+  visibility  Visibility @default(private)
+  virusStatus ScanStatus @default(pending)
+  ownerId     String?
+  createdAt   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, product])
+  @@schema("platform")
+}
+
+/// Unified search index. Products push documents through the search service;
+/// today it is Postgres full-text, tomorrow the same rows feed OpenSearch.
+model SearchDocument {
+  id        String   @id @default(uuid())
+  tenantId  String
+  product   String
+  type      String
+  refId     String
+  title     String
+  body      String?
+  tags      String[]
+  ownerId   String?
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, product, type, refId])
+  @@index([tenantId, product])
+  @@schema("platform")
+}
+
+/// One notification pipeline for every product: in-app, email, push, webhook.
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  product   String
+  type      String
+  title     String
+  body      String
+  channel   NotificationChannel @default(in_app)
+  status    NotificationStatus  @default(pending)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, status])
+  @@schema("platform")
+}
+
+/// Feature flags scoped to platform, tenant or user. Also the kill-switch used
+/// to shed load or disable a failing product without a deploy.
+model FeatureFlag {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  description  String
+  enabled      Boolean  @default(false)
+  rolloutPct   Int      @default(0)
+  tenantAllow  String[]
+  tenantDeny   String[]
+  updatedAt    DateTime @updatedAt
+
+  @@schema("platform")
+}
+
+enum Region {
+  us
+  eu
+  ap
+
+  @@schema("platform")
+}
+enum Tier {
+  free
+  pro
+  business
+  enterprise
+
+  @@schema("platform")
+}
+enum TenantStatus {
+  active
+  suspended
+  deleting
+
+  @@schema("platform")
+}
+enum UserStatus {
+  active
+  locked
+  deleted
+
+  @@schema("platform")
+}
+enum MembershipStatus {
+  invited
+  active
+  suspended
+
+  @@schema("platform")
+}
+enum ProductStatus {
+  active
+  suspended
+  trialing
+
+  @@schema("platform")
+}
+enum ActorType {
+  user
+  service_account
+  system
+
+  @@schema("platform")
+}
+enum OutboxStatus {
+  pending
+  published
+  failed
+
+  @@schema("platform")
+}
+enum Visibility {
+  private
+  tenant
+  public
+
+  @@schema("platform")
+}
+enum ScanStatus {
+  pending
+  clean
+  infected
+  skipped
+
+  @@schema("platform")
+}
+enum NotificationChannel {
+  in_app
+  email
+  push
+  webhook
+
+  @@schema("platform")
+}
+enum NotificationStatus {
+  pending
+  sent
+  failed
+
+  @@schema("platform")
+}
+
+// ===========================================================================
+// PRODUCT: CALENDAR  (owns schema "calendar" — nothing else may read it)
+// ===========================================================================
+
+model CalendarCalendar {
+  id        String   @id @default(uuid())
+  tenantId  String
+  ownerId   String
+  name      String
+  timezone  String   @default("UTC")
+  color     String   @default("#4F46E5")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  events CalendarEvent[]
+
+  @@index([tenantId, ownerId])
+  @@map("calendars")
+  @@schema("calendar")
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  tenantId    String
+  calendarId  String
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime
+  allDay      Boolean  @default(false)
+  /// RFC 5545 recurrence rule; expanded at read time, not stored per instance.
+  recurrence  String?
+  /// Set when the event was created from a Meet room, via the event bus.
+  meetRoomId  String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  calendar  CalendarCalendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  attendees CalendarAttendee[]
+
+  @@index([tenantId, startsAt])
+  @@index([calendarId, startsAt])
+  @@map("events")
+  @@schema("calendar")
+}
+
+model CalendarAttendee {
+  id       String @id @default(uuid())
+  tenantId String
+  eventId  String
+  userId   String?
+  email    String
+  response AttendeeResponse @default(pending)
+
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email])
+  @@map("attendees")
+  @@schema("calendar")
+}
+
+enum AttendeeResponse {
+  pending
+  accepted
+  declined
+  tentative
+
+  @@schema("calendar")
+}
+
+// ===========================================================================
+// PRODUCT: MEET
+// ===========================================================================
+
+model MeetRoom {
+  id           String   @id @default(uuid())
+  tenantId     String
+  code         String   @unique
+  title        String
+  hostId       String
+  /// Media servers are stateful; the room records where it was pinned so
+  /// signalling can route participants to the same SFU node.
+  sfuRegion    String   @default("us")
+  maxParticipants Int   @default(100)
+  requireAuth  Boolean  @default(true)
+  recordingUrl String?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime @default(now())
+
+  participants MeetParticipant[]
+
+  @@index([tenantId, createdAt])
+  @@map("rooms")
+  @@schema("meet")
+}
+
+model MeetParticipant {
+  id       String   @id @default(uuid())
+  tenantId String
+  roomId   String
+  userId   String?
+  displayName String
+  role     MeetRole @default(attendee)
+  joinedAt DateTime @default(now())
+  leftAt   DateTime?
+
+  room MeetRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@map("participants")
+  @@schema("meet")
+}
+
+enum MeetRole {
+  host
+  cohost
+  attendee
+
+  @@schema("meet")
+}
+
+// ===========================================================================
+// PRODUCT: DRIVE
+// ===========================================================================
+
+model DriveNode {
+  id        String   @id @default(uuid())
+  tenantId  String
+  parentId  String?
+  ownerId   String
+  name      String
+  kind      DriveNodeKind
+  /// Points at platform.FileObject — Drive stores no bytes of its own.
+  fileId    String?
+  sizeBytes BigInt   @default(0)
+  trashedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   DriveNode?  @relation("DriveTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children DriveNode[] @relation("DriveTree")
+  shares   DriveShare[]
+
+  @@index([tenantId, parentId])
+  @@index([tenantId, ownerId])
+  @@map("nodes")
+  @@schema("drive")
+}
+
+model DriveShare {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nodeId    String
+  granteeId String?
+  granteeEmail String?
+  access    DriveAccess @default(viewer)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  node DriveNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@map("shares")
+  @@schema("drive")
+}
+
+enum DriveNodeKind {
+  folder
+  file
+
+  @@schema("drive")
+}
+enum DriveAccess {
+  viewer
+  commenter
+  editor
+  owner
+
+  @@schema("drive")
+}

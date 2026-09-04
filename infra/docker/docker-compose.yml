@@ -1,0 +1,58 @@
+# Ports are overridable so the stack never collides with other local services:
+#   POSTGRES_PORT / REDIS_PORT / MINIO_PORT / JAEGER_UI_PORT / SMTP_PORT
+# Local development mirrors the production topology in miniature: the same
+# components, one node each. Anything that is a managed service in production
+# (RDS, ElastiCache, S3, OpenSearch) has an open-source stand-in here, so a
+# developer can run the whole platform with `pnpm infra:up`.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: helix
+      POSTGRES_PASSWORD: helix
+      POSTGRES_DB: helix
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helix"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    volumes: ["redisdata:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage. In production: S3 / GCS / R2.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: helixadmin
+      MINIO_ROOT_PASSWORD: helixadmin
+    ports: ["${MINIO_PORT:-9000}:9000", "${MINIO_CONSOLE_PORT:-9001}:9001"]
+    volumes: ["miniodata:/data"]
+
+  # Traces + metrics. In production: Grafana Cloud / Datadog / self-hosted LGTM.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["${JAEGER_UI_PORT:-16686}:16686", "${OTLP_PORT:-4318}:4318"]
+
+  # Local mail sink so notification flows are testable without sending mail.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["${SMTP_PORT:-1025}:1025", "${MAILPIT_UI_PORT:-8025}:8025"]
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

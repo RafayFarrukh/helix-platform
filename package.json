@@ -1,0 +1,37 @@
+{
+  "name": "helix-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Helix \u2014 a multi-tenant platform designed to host 100+ integrated products and services.",
+  "packageManager": "pnpm@10.25.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "infra:up": "docker compose --env-file .env -f infra/docker/docker-compose.yml up -d",
+    "infra:down": "docker compose --env-file .env -f infra/docker/docker-compose.yml down",
+    "db:migrate": "pnpm --filter @helix/api exec prisma migrate dev",
+    "db:generate": "pnpm --filter @helix/api exec prisma generate",
+    "db:seed": "pnpm --filter @helix/api run seed",
+    "gen:product": "node tools/generators/product/index.mjs"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "msgpackr-extract"
+    ]
+  }
+}
