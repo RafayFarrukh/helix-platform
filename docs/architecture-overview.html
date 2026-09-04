@@ -197,7 +197,7 @@ pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.62;overflow-x:
       <div class="fact"><dt>Stack</dt><dd>TypeScript &middot; NestJS &middot; Next.js &middot; PostgreSQL &middot; Redis</dd></div>
       <div class="fact"><dt>Deployables</dt><dd>API &middot; worker &middot; media plane</dd></div>
       <div class="fact"><dt>Sample project</dt><dd>4 products, running &amp; seeded</dd></div>
-      <div class="fact"><dt>Evidence</dt><dd>11 controls executed, transcripts included</dd></div>
+      <div class="fact"><dt>Evidence</dt><dd>16 checks executed, transcripts included</dd></div>
     </dl>
   </header>
 
@@ -603,7 +603,9 @@ docs/                <span class="c">the six answers &middot; ADRs &middot; veri
             <div class="item"><h4>Authorization / RBAC <span class="vtag">verified</span></h4><p>user &rarr; membership &rarr; roles &rarr; permissions, keyed <code>product.resource.action</code> and declared by manifests. Routes are protected by default; opting out needs <code>@Public()</code>. A <code>member</code> was refused <code>calendar.event.delete</code>; the owner succeeded.</p></div>
             <div class="item"><h4>Multi-tenancy <span class="vtag">verified</span></h4><p>Three layers: tenant from the token never a header; <code>tenantId</code> on every query; Postgres RLS as the backstop. A forgotten filter returns <em>zero rows</em>, not another tenant's data.</p></div>
             <div class="item"><h4>API security</h4><p>TLS 1.3, Helmet headers, CORS allow-list, whitelisting validation so mass-assignment is impossible, parameterised queries throughout, one RFC 9457 error shape, per-product versioning.</p></div>
+            <div class="item"><h4>Quotas <span class="vtag">verified</span></h4><p>Per-plan limits are declared in each product&rsquo;s manifest and enforced by the kernel. The product names a metric; the kernel resolves the tier, finds the limit and refuses with <code>402</code>. Counters roll back on refusal, so two concurrent requests at the limit cannot both pass.</p></div>
             <div class="item"><h4>Rate limiting <span class="vtag">verified</span></h4><p>Per-tenant sliding window in Redis, one atomic round trip, scaled by plan tier. Per tenant rather than per IP, because tenants share NATs and the resource protected is capacity per paying customer.</p></div>
+            <div class="item"><h4>Session handling <span class="vtag">verified</span></h4><p>Web tokens live in httpOnly cookies set by a server action, never in <code>localStorage</code> &mdash; an XSS in any one of 100 product UIs must not be able to read the token and impersonate the user across every other product.</p></div>
             <div class="item"><h4>Data encryption</h4><p>TLS in transit, volume encryption at rest, envelope encryption with per-tenant KMS keys &mdash; so destroying one key crypto-shreds one customer and makes a deletion request provable.</p></div>
             <div class="item"><h4>Secure file storage</h4><p>Pre-signed URLs only, MIME allow-list, size caps, async malware scanning that gates download, private buckets, versioning and object lock.</p></div>
             <div class="item"><h4>Audit logs <span class="vtag">verified</span></h4><p>Append-only, written by the kernel, covering <em>denials as well as successes</em> &mdash; a trail that records only what succeeded is blind to an attacker probing for permissions they lack.</p></div>
@@ -775,12 +777,25 @@ docs/                <span class="c">the six answers &middot; ADRs &middot; veri
   <span class="no">Error: Product registry validation failed with 2 error(s). Refusing to start.</span></pre></div>
           </div>
 
+          <div>
+            <div class="termcap"><span class="tag">Passed</span><span>Quotas enforced from the limits a product declares</span></div>
+            <div class="term"><pre><span class="dim">business plan allows 100,000 calendar events/month (from calendar.manifest.ts)</span>
+
+<span class="cmd">POST /v1/calendar/events   # event #100,000</span>
+  <span class="ok">created: At the limit</span>
+
+<span class="cmd">POST /v1/calendar/events   # event #100,001</span>
+  <span class="no">402 quota exceeded</span> &mdash; Monthly eventsPerMonth limit reached for calendar on the business plan
+
+  counter after refusal: 100000   <span class="dim">(rolled back, no drift)</span></pre></div>
+          </div>
+
           <div class="kicker" style="margin-top:30px">What is not verified</div>
           <div class="items">
             <div class="item"><h4>Load and failover</h4><p>No load test, chaos test or failover drill was run. The scaling figures are design targets, not measurements.</p></div>
-            <div class="item"><h4>Kubernetes and multi-region</h4><p>Manifests are written but were not applied to a cluster. Kafka, OpenSearch, sharding and cells are the future column throughout &mdash; nothing here runs them.</p></div>
+            <div class="item"><h4>Kubernetes, Terraform, multi-region</h4><p>Manifests and the Terraform cell module are written and reviewed, but never applied to a cluster or a cloud account. Kafka, OpenSearch, sharding and cells are the future column throughout &mdash; nothing here runs them.</p></div>
             <div class="item"><h4>The media plane</h4><p>Designed and justified, with its data model in place, but not implemented.</p></div>
-            <div class="item"><h4>Remaining hardening</h4><p>Most product reads rely on the application-level tenant filter with RLS as the backstop. Connecting the API as the restricted <code>helix_app</code> role in every environment is the outstanding step.</p></div>
+            <div class="item"><h4>Remaining hardening</h4><p>Most product reads rely on the application-level tenant filter with RLS as the backstop; connecting the API as the restricted <code>helix_app</code> role everywhere is the outstanding step. The worker&rsquo;s quota-flush job is written but not exercised here.</p></div>
           </div>
         </div>
       </section>

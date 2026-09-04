@@ -161,7 +161,7 @@ number 87.
 ## 9. Rate limiting
 
 ```
-    x-correlation-id: ea4eac19-b825-4fc6-9a51-69bf0ca4830b
+    x-correlation-id: e7f53a94-5e08-4dc4-9726-81a5889249c6
     x-ratelimit-limit: 12000
     x-ratelimit-remaining: 11998
 ```
@@ -178,7 +178,7 @@ Per tenant rather than per IP, scaled by plan tier (this workspace is on
 ----------+-----------------------------------------------------------------+---------+------------------------------------
  meet     | POST /v1/meet/rooms                                             | denied  | The "meet" product is not enabled 
  calendar | DELETE /v1/calendar/events/:id                                  | allowed | 
- calendar | DELETE /v1/calendar/events/830f0b62-4947-4920-99e6-c2463e2f6e64 | denied  | Missing permission: calendar.event
+ calendar | DELETE /v1/calendar/events/6eb705ca-deff-4a1c-a938-3f4e02e6d4e0 | denied  | Missing permission: calendar.event
  meet     | POST /v1/meet/rooms                                             | allowed | 
 (4 rows)
 ```
@@ -282,6 +282,46 @@ Both frontends build clean:
 
 ---
 
+## 15. Quotas are enforced by the kernel, from limits the product declares
+
+```
+    business plan allows 100000 calendar events/month (from calendar.manifest.ts)
+    event #100000 (at the limit):
+      created: At the limit
+    event #100001 (over the limit):
+      402 quota exceeded - Monthly eventsPerMonth limit reached for calendar on the business plan
+    counter after refusal: 100000 (rolled back, no drift)
+```
+
+Calendar's code names a metric (`eventsPerMonth`) and nothing else. The kernel
+resolves the tenant's plan, finds the limit the manifest declared for that plan,
+and refuses. Changing what a plan allows is a manifest edit; adding a plan tier
+does not touch any of the 100 products.
+
+The counter is incremented *before* the check and rolled back on refusal, so two
+concurrent requests at the limit cannot both pass — a read-then-check would let
+them.
+
+---
+
+## 16. The web app has a real session
+
+```
+GET /  (no session)   -> 307 redirect to /login
+GET /login            -> 200
+```
+
+Signing in as `owner@acme.test` sets httpOnly cookies via a server action and
+lands on the launcher with all four products rendered and "Sign out" in the
+header; `/apps/calendar`, `/apps/meet` and `/apps/drive` all render against the
+session, and `/apps/meet` shows the room created in check 5 above.
+
+Tokens are in httpOnly cookies rather than `localStorage` on purpose: an XSS in
+any one of 100 product UIs must not be able to read the token and impersonate the
+user across every other product.
+
+---
+
 ## What is *not* verified
 
 Stated plainly, because a design document that implies more than it demonstrates
@@ -300,3 +340,8 @@ is worse than one that admits its edges:
   product reads currently rely on the application-level filter with RLS as the
   backstop. Connecting the API as the `helix_app` role in all environments is the
   remaining hardening step.
+- **Terraform** describes four cells but was never applied to a cloud account, so
+  it is reviewed code, not proven infrastructure.
+- **Quota counters** are enforced from Redis. The worker flushes them to
+  `ProductAccount.quotaUsage` for durability and billing, but that flush job is
+  written, not exercised here.

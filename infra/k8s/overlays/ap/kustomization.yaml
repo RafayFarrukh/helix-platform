@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: helix-ap
+resources:
+  - ../../base
+patches:
+  - path: replicas.yaml
+    target: { kind: Deployment, name: helix-api }
+configMapGenerator:
+  - name: helix-api-config
+    literals:
+      - REGION=ap
+      - AWS_REGION=ap-south-1
+      # Tenants are pinned to a region by Tenant.region. A cell serves only the
+      # tenants assigned to it, so a bad deploy or a failure is scoped to that
+      # slice of customers rather than the whole platform.
+      - DATA_RESIDENCY_ENFORCED=true

@@ -3,6 +3,7 @@ import type { EventBus, RequestContext } from '@helix/core';
 import { PlatformError } from '@helix/core';
 import { PrismaService } from '../../shared/prisma/prisma.service';
 import { EVENT_BUS } from '../../platform/events/events.module';
+import { QuotaService } from '../../platform/billing/quota.service';
 import type { CreateEventDto } from './dto/create-event.dto';
 
 /**
@@ -21,6 +22,7 @@ import type { CreateEventDto } from './dto/create-event.dto';
 export class CalendarService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly quota: QuotaService,
     @Inject(EVENT_BUS) private readonly events: EventBus,
   ) {}
 
@@ -54,6 +56,10 @@ export class CalendarService {
       where: { id: dto.calendarId, tenantId: ctx.tenant.tenantId },
     });
     if (!calendar) throw new PlatformError('not_found', 'Calendar not found');
+
+    // The product names the metric; the kernel owns the limit, the tier lookup
+    // and the counter. Calendar has no idea what a "business" plan allows.
+    await this.quota.consume(ctx.tenant.tenantId, ctx.tenant.tier, 'calendar', 'eventsPerMonth');
 
     const event = await this.prisma.calendarEvent.create({
       data: {

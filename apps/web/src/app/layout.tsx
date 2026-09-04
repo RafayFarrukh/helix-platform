@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { logout } from '@/features/auth/actions';
+import { getAccessToken } from '@/features/auth/session';
 
 export const metadata = {
   title: 'Helix',
@@ -9,7 +11,9 @@ export const metadata = {
  * The platform shell. Every product renders inside it, which is what gives 100+
  * products a single identity, a single navigation model and a single search box.
  */
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const signedIn = Boolean(await getAccessToken());
+
   return (
     <html lang="en">
       <body>
@@ -48,6 +52,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               }}
             />
           </form>
+          {signedIn && (
+            <form action={logout}>
+              <button type="submit" style={{
+                background: 'none', border: 0, color: 'var(--helix-muted)',
+                font: 'inherit', cursor: 'pointer', padding: 0,
+              }}>Sign out</button>
+            </form>
+          )}
         </header>
         <main style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>{children}</main>
       </body>

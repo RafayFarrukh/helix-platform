@@ -1,6 +1,8 @@
 import { Global, Module, OnApplicationBootstrap } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuditService } from './audit/audit.service';
+import { QuotaService } from './billing/quota.service';
+import { UsageController } from './billing/usage.controller';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { FeatureFlagService } from './feature-flags/feature-flag.service';
@@ -26,13 +28,13 @@ import { TenancyService } from './tenancy/tenancy.service';
   imports: [
     JwtModule.register({ global: true, secret: process.env.JWT_ACCESS_SECRET }),
   ],
-  controllers: [AuthController, HealthController, RegistryController, SearchController],
+  controllers: [AuthController, HealthController, RegistryController, SearchController, UsageController],
   providers: [
-    AuditService, AuthService, RbacService, TenancyService, SearchService, StorageService,
+    AuditService, QuotaService, AuthService, RbacService, TenancyService, SearchService, StorageService,
     NotificationService, FeatureFlagService, ProductRegistryService,
   ],
   exports: [
-    AuditService, AuthService, RbacService, TenancyService, SearchService, StorageService,
+    AuditService, QuotaService, AuthService, RbacService, TenancyService, SearchService, StorageService,
     NotificationService, FeatureFlagService, ProductRegistryService,
   ],
 })

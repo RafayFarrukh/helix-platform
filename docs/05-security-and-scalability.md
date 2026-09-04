@@ -79,6 +79,21 @@ placement driven by `Tenant.region`.
 - *Future:* mTLS between services, request signing for partners, schema-diff
   contract tests in CI, gateway-level anomaly detection.
 
+### Quotas
+
+Per-plan limits are declared in each product's manifest and enforced by the
+kernel: the product names a metric, the kernel resolves the tenant's tier, finds
+the declared limit and refuses with `402 quota_exceeded`. Counters are atomic in
+Redis (incremented then rolled back on refusal, so concurrent requests at the
+limit cannot both pass) and flushed to `ProductAccount.quotaUsage` by the worker
+for durability and billing.
+
+Changing what a plan allows is a manifest edit; adding a plan tier touches no
+product code. **Verified** —
+[transcript](VERIFICATION.md#15-quotas-are-enforced-by-the-kernel-from-limits-the-product-declares).
+
+**Code:** [`quota.service.ts`](../apps/api/src/platform/billing/quota.service.ts)
+
 ### Rate Limiting
 
 Per-**tenant** sliding window in Redis (single atomic `INCR`+`EXPIRE`), scaled by

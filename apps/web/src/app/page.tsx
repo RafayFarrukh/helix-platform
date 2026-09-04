@@ -1,4 +1,6 @@
 import { AppLauncher } from '@helix/ui';
+import { fromApi } from '@/lib/products';
+import type { LauncherItem } from '@helix/ui';
 
 /**
  * The home page is the app launcher, rendered from the product registry.
@@ -7,12 +9,7 @@ import { AppLauncher } from '@helix/ui';
  * the moment its manifest is registered on the API, with no frontend deploy.
  */
 export default async function HomePage() {
-  const res = await fetch(`${process.env.INTERNAL_API_URL ?? 'http://localhost:4100'}/v1/platform/products`, {
-    headers: { authorization: `Bearer ${process.env.DEMO_TOKEN ?? ''}` },
-    cache: 'no-store',
-  }).catch(() => null);
-
-  const products = res?.ok ? (await res.json()).data : [];
+  const { data, problem } = await fromApi<{ data: LauncherItem[] }>('/v1/platform/products');
 
   return (
     <>
@@ -21,13 +18,8 @@ export default async function HomePage() {
         Every product below is served by the same platform kernel: one identity, one
         permission model, one audit trail, one search index.
       </p>
-      {products.length === 0 ? (
-        <p style={{ color: 'var(--helix-muted)' }}>
-          Start the API (<code>pnpm --filter @helix/api dev</code>) to load the product registry.
-        </p>
-      ) : (
-        <AppLauncher products={products} />
-      )}
+      {problem ? <p style={{ color: 'var(--helix-danger)' }}>{problem}</p>
+               : <AppLauncher products={data?.data ?? []} />}
     </>
   );
 }

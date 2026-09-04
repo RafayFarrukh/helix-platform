@@ -1,0 +1,11 @@
+# The base is region-agnostic. Everything that differs between regions is an
+# overlay patch, so a new region is a directory, not a fork.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: helix
+resources:
+  - api-deployment.yaml
+  - api-scaling.yaml
+  - network-policy.yaml
+commonLabels:
+  app.kubernetes.io/part-of: helix-platform

@@ -1,0 +1,15 @@
+# Capacity is sized per region to its actual traffic, not copied from us-east.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: helix-api
+spec:
+  replicas: 6
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: helix-api
+spec:
+  minReplicas: 6
+  maxReplicas: 80

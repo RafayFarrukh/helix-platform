@@ -13,6 +13,8 @@ docker exec -i "$PG" psql -U helix -d helix -q -c \
 docker exec -i "${REDIS_CONTAINER:-docker-redis-1}" redis-cli --scan --pattern 'tenantctx:*' 2>/dev/null \
   | xargs -r docker exec -i "${REDIS_CONTAINER:-docker-redis-1}" redis-cli DEL >/dev/null 2>&1
 
+TID=$(docker exec -i "$PG" psql -U helix -d helix -tAc "SELECT id FROM platform.\"Tenant\" WHERE slug='acme';" | tr -d '\r ')
+
 say "[1] Tenant isolation is enforced by the database (Postgres RLS)"
 docker exec -i "$PG" psql -U helix -d helix -q < apps/api/prisma/sql/verify_tenant_isolation.sql 2>&1 | grep -vE '^\s*$'
 docker exec -i "$PG" psql -U helix -d helix -q -c "DELETE FROM platform.\"Tenant\" WHERE slug IN ('rls-a','rls-b');" >/dev/null 2>&1
@@ -86,5 +88,28 @@ docker exec -i "$PG" psql -U helix -d helix -q -c \
 say "[11] Transactional outbox: every event durably recorded, then relayed"
 docker exec -i "$PG" psql -U helix -d helix -q -c \
 "SELECT name, status, attempts FROM platform.\"OutboxEvent\" ORDER BY \"createdAt\" DESC LIMIT 4;"
+
+say "[12] Quotas are enforced by the kernel, from limits the product declares"
+QKEY="t:${TID}:quota:calendar:eventsPerMonth:$(date -u +%Y-%m)"
+LIMIT=$(curl -s "$API/v1/platform/usage" -H "authorization: Bearer $AT" | python3 -c '
+import json,sys
+for u in json.load(sys.stdin)["data"]:
+    if u["product"]=="calendar" and u["metric"]=="eventsPerMonth": print(u["limit"])')
+echo "    business plan allows $LIMIT calendar events/month (from calendar.manifest.ts)"
+docker exec -i "${REDIS_CONTAINER:-docker-redis-1}" redis-cli SET "$QKEY" $((LIMIT - 1)) >/dev/null
+CALID=$(docker exec -i "$PG" psql -U helix -d helix -tAc \
+  "SELECT id FROM calendar.calendars WHERE \"tenantId\"='$TID' LIMIT 1;" | tr -d '\r ')
+mkevent() {
+  curl -s -X POST "$API/v1/calendar/events" -H "authorization: Bearer $AT" -H 'content-type: application/json' \
+    -d "{\"calendarId\":\"$CALID\",\"title\":\"$1\",\"startsAt\":\"2026-11-01T10:00:00.000Z\",\"endsAt\":\"2026-11-01T11:00:00.000Z\"}"
+}
+echo "    event #$LIMIT (at the limit):"
+mkevent "At the limit" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("      created:", d.get("title") or d.get("detail"))'
+echo "    event #$((LIMIT + 1)) (over the limit):"
+mkevent "Over the limit" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("      %s %s - %s" % (d.get("status"), d.get("title"), d.get("detail")))'
+echo "    counter after refusal: $(docker exec -i "${REDIS_CONTAINER:-docker-redis-1}" redis-cli GET "$QKEY" | tr -d '\r') (rolled back, no drift)"
+docker exec -i "${REDIS_CONTAINER:-docker-redis-1}" redis-cli DEL "$QKEY" >/dev/null
+docker exec -i "$PG" psql -U helix -d helix -q -c \
+  "DELETE FROM calendar.events WHERE title IN ('At the limit','Over the limit');" >/dev/null
 
 say "Done."

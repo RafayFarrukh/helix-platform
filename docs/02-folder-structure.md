@@ -33,6 +33,7 @@ helix-platform/
 │   │       │   ├── tenancy/          #    tenant resolution, entitlement, product enablement
 │   │       │   ├── rate-limit/       #    per-tenant sliding window, tier-scaled
 │   │       │   ├── audit/            #    append-only trail (interceptor + filter)
+│       │   ├── billing/          #    per-plan quotas, enforced from manifests
 │   │       │   ├── events/           #    EventBus interface + outbox implementation
 │   │       │   ├── search/           #    one index for every product
 │   │       │   ├── storage/          #    pre-signed uploads, scanning, per-tenant keys
@@ -63,7 +64,7 @@ helix-platform/
 │   │   └── src/
 │   │       ├── app/                  #    shell layout, launcher, global search
 │   │       │   └── apps/{product}/   #    one route folder per product UI
-│   │       ├── features/             #    cross-cutting client logic (auth, search)
+│   │       ├── features/auth/        #    session cookies + sign-in server action
 │   │       ├── components/           #    app-specific composition
 │   │       └── lib/                  #    API client factory
 │   │
@@ -76,10 +77,10 @@ helix-platform/
 ├── packages/
 │   ├── core/                         # THE CONTRACT — product manifest, EventBus,
 │   │   └── src/                      # tenant context, error taxonomy, registry
-│   ├── contracts/                    # shared DTO/event schemas (zod)
+│   ├── contracts/                    # event payload schemas — the wire contract
 │   ├── sdk/                          # one typed API client for every frontend
 │   ├── ui/                           # design system + tokens (one look, 100 products)
-│   ├── observability/                # tracing, metrics, structured logging
+│   ├── observability/                # tracing, RED metrics, redacting logger
 │   └── config/                       # tsconfig + eslint (incl. the boundary rule)
 │
 ├── infra/
