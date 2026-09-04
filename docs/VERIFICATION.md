@@ -9,6 +9,12 @@ pnpm --filter @helix/api dev      # in another shell
 ./scripts/verify.sh
 ```
 
+Unit and contract tests need none of that infrastructure:
+
+```bash
+pnpm test        # 38 tests, no database or network
+```
+
 Environment: Node 22, PostgreSQL 17, Redis 7, macOS. API on `:4100`.
 
 ---
@@ -322,6 +328,28 @@ user across every other product.
 
 ---
 
+## 17. The test suite
+
+```
+@helix/core   # tests 13   # pass 13   # fail 0
+@helix/api    Tests: 25 passed, 25 total
+Tasks: 3 successful, 3 total
+```
+
+| Suite | Covers |
+|---|---|
+| `packages/core/src/registry.test.ts` (13) | Every rule the registry enforces: duplicate keys, duplicate schemas, duplicate API prefixes, permissions declared outside a product's namespace, permissions already owned, events subscribed to that nobody publishes, missing soft dependencies warning rather than failing, and manifest defaults. |
+| `rbac.service.spec.ts` (9) | Wildcard permission matching, including the cases that would grant too much: `calendar.*` must not reach `drive.node.delete`, `calendar.event.*` must not reach `calendar.calendar.manage`, and `calendar.*` must not match `calendar2.event.read` on a non-boundary prefix. |
+| `password.spec.ts` (5) | Hash/verify round trip, wrong-password rejection, per-password salting, parameters stored in the hash so they can be raised later, and malformed stored hashes returning false rather than throwing. |
+| `products.contract.spec.ts` (11) | The four real product manifests, validated as a graph — so a bad product fails the pull request rather than the next deploy. |
+
+The split is deliberate: unit tests where the logic is subtle and a mistake
+grants too much access, a contract test over the real manifests, SQL for the
+isolation policy, and `verify.sh` for behaviour that only exists once the whole
+system is running.
+
+---
+
 ## What is *not* verified
 
 Stated plainly, because a design document that implies more than it demonstrates
@@ -329,6 +357,9 @@ is worse than one that admits its edges:
 
 - **Load and failover behaviour.** No load test, chaos test or failover drill was
   run. The scaling numbers in the docs are design targets, not measurements.
+- **End-to-end/integration tests** are the `verify.sh` transcripts rather than an
+  automated suite. There is no test that would fail CI if a controller regressed;
+  the 38 automated tests cover units and manifest contracts only.
 - **The Kubernetes manifests** are written but were not applied to a cluster.
 - **The media/SFU plane** is designed and justified but not implemented; only its
   data model and its separation rationale exist here.

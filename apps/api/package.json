@@ -8,7 +8,7 @@
     "start": "node dist/main.js",
     "seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "jest"
   },
   "dependencies": {
     "@helix/core": "workspace:*",

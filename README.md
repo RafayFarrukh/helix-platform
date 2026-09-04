@@ -49,7 +49,8 @@ pnpm --filter @helix/api dev            # API   → :4100  (OpenAPI at /docs)
 pnpm --filter @helix/web dev            # Web   → :3000
 pnpm --filter @helix/admin dev          # Admin → :3001
 
-./scripts/verify.sh      # runs every claim in the docs against the live system
+pnpm test                # 38 unit + contract tests, no database needed
+./scripts/verify.sh      # 16 controls exercised against the live system
 ```
 
 Seeded login: `owner@acme.test` / `Helix-Demo-2026!`
@@ -78,6 +79,8 @@ Everything below was executed against the running system — full transcript in
   product's permission fails the boot with a named error.
 - **`pnpm gen:product notes`** produced a fourth product that booted, routed and
   synced permissions with zero manual edits.
+- **Quotas are enforced** from the limits each product's manifest declares: event
+  #100,000 succeeds, #100,001 is refused with `402`, and the counter rolls back.
 
 ---
 

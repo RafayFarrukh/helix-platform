@@ -197,7 +197,7 @@ pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.62;overflow-x:
       <div class="fact"><dt>Stack</dt><dd>TypeScript &middot; NestJS &middot; Next.js &middot; PostgreSQL &middot; Redis</dd></div>
       <div class="fact"><dt>Deployables</dt><dd>API &middot; worker &middot; media plane</dd></div>
       <div class="fact"><dt>Sample project</dt><dd>4 products, running &amp; seeded</dd></div>
-      <div class="fact"><dt>Evidence</dt><dd>16 checks executed, transcripts included</dd></div>
+      <div class="fact"><dt>Evidence</dt><dd>38 tests + 16 live checks, transcripts included</dd></div>
     </dl>
   </header>
 
@@ -795,6 +795,7 @@ docs/                <span class="c">the six answers &middot; ADRs &middot; veri
             <div class="item"><h4>Load and failover</h4><p>No load test, chaos test or failover drill was run. The scaling figures are design targets, not measurements.</p></div>
             <div class="item"><h4>Kubernetes, Terraform, multi-region</h4><p>Manifests and the Terraform cell module are written and reviewed, but never applied to a cluster or a cloud account. Kafka, OpenSearch, sharding and cells are the future column throughout &mdash; nothing here runs them.</p></div>
             <div class="item"><h4>The media plane</h4><p>Designed and justified, with its data model in place, but not implemented.</p></div>
+            <div class="item"><h4>No end-to-end test suite</h4><p>38 automated tests cover the registry rules, RBAC wildcard matching, password hashing and the product-manifest contracts. Behaviour that only exists once the system is running is covered by <code>verify.sh</code> transcripts, not by tests that would fail CI.</p></div>
             <div class="item"><h4>Remaining hardening</h4><p>Most product reads rely on the application-level tenant filter with RLS as the backstop; connecting the API as the restricted <code>helix_app</code> role everywhere is the outstanding step. The worker&rsquo;s quota-flush job is written but not exercised here.</p></div>
           </div>
         </div>
